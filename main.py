@@ -12,6 +12,14 @@ REQUEST_KWARGS = {
 class GameBot:
     def __init__(self):
         self.STATE = 0
+
+    def game_bot_start(self, update, context):
+        self.STATE = 0
+        # keyboard
+        self.create_start_keyboard(update,
+                                   'Я твой личный Игровой Бот!\n'
+                                   'Какая вам нужна информация?')
+
     def create_start_keyboard(self, update, text):
         reply_keyboard = [['/dice', '/timer'], ]
         markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=False)
@@ -19,13 +27,6 @@ class GameBot:
             text,
             reply_markup=markup,
         )
-
-    def start(self, update, context):
-        self.STATE = 0
-        # keyboard
-        self.create_start_keyboard(update,
-                                   'Приветствую! Я твой личный Бот!\n'
-                                   'Какая вам нужна информация?')
 
     def close_keyboard(self, update, context):
         update.message.reply_text(
@@ -101,6 +102,7 @@ class GameBot:
         chat_id = update.message.chat_id
         try:
             if due is None:
+                # args[0] - value arg ( seconds )
                 due = int(context.args[0])
             if due < 0:
                 update.message.reply_text(
@@ -137,7 +139,7 @@ class GameBot:
                 reply_markup=ReplyKeyboardRemove(),
             )
             self.create_start_keyboard(update, 'Что желаете сделать?')
-        elif  self.STATE == 2:
+        elif self.STATE == 2:
             # dice
             if update.message.text == 'кинуть один шестигранный кубик':
                 update.message.reply_text(
@@ -161,17 +163,28 @@ class GameBot:
                 self.set_timer(update, context, 300)
 
 
+def start(update, context):
+    # keyboard
+    reply_keyboard = [['/game_bot', '/other_bot'], ]
+    markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=False)
+    update.message.reply_text(
+        'Приветствую! Я твой личный Бот!\n'
+        'Какой бот вам нужен?',
+        reply_markup=markup,
+    )
+
+
 def main():
     # create object upedater
     updater = Updater('5165907301:AAHJ13f3RmDp6S-tkqoB4flgtLiwGn46veU', use_context=True)
     # take from updater message manager
     dp = updater.dispatcher
 
-
     # game bot
     game_bot = GameBot()
     # command handlers
-    dp.add_handler(CommandHandler("start", game_bot.start))
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CommandHandler("game_bot", game_bot.game_bot_start))
     dp.add_handler(CommandHandler("help", game_bot.help))
     dp.add_handler(CommandHandler("close", game_bot.close_keyboard))
     dp.add_handler(CommandHandler('timer', game_bot.create_timer))
