@@ -1,5 +1,5 @@
 from telegram.ext import Updater, MessageHandler, Filters
-from telegram.ext import CallbackContext, CommandHandler
+from telegram.ext import CallbackContext, CommandHandler, ConversationHandler
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove
 import datetime
 import random
@@ -21,7 +21,9 @@ class GameBot:
                                    'Какая вам нужна информация?')
 
     def create_start_keyboard(self, update, text):
-        reply_keyboard = [['/dice', '/timer'], ]
+        self.STATE = 0
+        reply_keyboard = [['/dice', '/timer'],
+                          ['вернуться назад']]
         markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=False)
         update.message.reply_text(
             text,
@@ -138,7 +140,10 @@ class GameBot:
                 'OK',
                 reply_markup=ReplyKeyboardRemove(),
             )
-            self.create_start_keyboard(update, 'Что желаете сделать?')
+            if self.STATE == 0:
+                start(update, None)
+            else:
+                self.create_start_keyboard(update, 'Что желаете сделать?')
         elif self.STATE == 2:
             # dice
             if update.message.text == 'кинуть один шестигранный кубик':
@@ -162,10 +167,69 @@ class GameBot:
             elif update.message.text == '5 минут':
                 self.set_timer(update, context, 300)
 
+    def game_bot_handlers(self, dp):
+        """
+
+        :param dp: update.dispatcher
+        :return: None
+        """
+        # add handlers
+        dp.add_handler(CommandHandler("game_bot", self.game_bot_start))
+        dp.add_handler(CommandHandler("help", self.help))
+        dp.add_handler(CommandHandler("close", self.close_keyboard))
+        dp.add_handler(CommandHandler('timer', self.create_timer))
+        dp.add_handler(CommandHandler('dice', self.create_dicer))
+        # command timer handler
+        dp.add_handler(CommandHandler("set", self.set_timer,
+                                      pass_args=True,
+                                      pass_job_queue=True,
+                                      pass_chat_data=True))
+        dp.add_handler(CommandHandler("unset", self.unset_timer,
+                                      pass_chat_data=True))
+
+        # message handlers
+        dp.add_handler(MessageHandler(Filters.text, self.tasks))
+
+
+class ConversationBot:
+    def create_conversation_bot(self, dp):
+        conv_handler = ConversationHandler(
+            entry_points=[CommandHandler('conversation_bot', self.go)],
+            states={
+                1: [MessageHandler(Filters.text, self.first_response)],
+                2: [MessageHandler(Filters.text, self.second_response)],
+            },
+
+            fallbacks=[CommandHandler('stop', self.stop)]
+        )
+        dp.add_handler(conv_handler)
+
+    def go(self, update, context):
+        update.message.reply_text(
+            "Привет. Пройдите небольшой опрос, пожалуйста!\n"
+            "В каком городе вы живёте?")
+        return 1
+
+    def first_response(self, update, context):
+        locality = update.message.text
+        update.message.reply_text(
+            "Какая погода в городе {locality}?".format(**locals()))
+        return 2
+
+    def second_response(self, update, context):
+        weather = update.message.text
+        print(weather)
+        update.message.reply_text("Спасибо за участие в опросе! Всего доброго!")
+        return ConversationHandler.END
+
+    def stop(self, update, context):
+        update.message.reply_text("Всего доброго!")
+        return ConversationHandler.END
+
 
 def start(update, context):
     # keyboard
-    reply_keyboard = [['/game_bot', '/other_bot'], ]
+    reply_keyboard = [['/game_bot', '/conversation_bot'], ]
     markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=False)
     update.message.reply_text(
         'Приветствую! Я твой личный Бот!\n'
@@ -180,25 +244,16 @@ def main():
     # take from updater message manager
     dp = updater.dispatcher
 
+    # conversation bot
+    conversation_bot = ConversationBot()
+    conversation_bot.create_conversation_bot(dp)
+
+    dp.add_handler(CommandHandler("start", start))
+
     # game bot
     game_bot = GameBot()
-    # command handlers
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(CommandHandler("game_bot", game_bot.game_bot_start))
-    dp.add_handler(CommandHandler("help", game_bot.help))
-    dp.add_handler(CommandHandler("close", game_bot.close_keyboard))
-    dp.add_handler(CommandHandler('timer', game_bot.create_timer))
-    dp.add_handler(CommandHandler('dice', game_bot.create_dicer))
-    # command timer handler
-    dp.add_handler(CommandHandler("set", game_bot.set_timer,
-                                  pass_args=True,
-                                  pass_job_queue=True,
-                                  pass_chat_data=True))
-    dp.add_handler(CommandHandler("unset", game_bot.unset_timer,
-                                  pass_chat_data=True))
+    game_bot.game_bot_handlers(dp)
 
-    # message handlers
-    dp.add_handler(MessageHandler(Filters.text, game_bot.tasks))
     # start bot
     updater.start_polling()
 
